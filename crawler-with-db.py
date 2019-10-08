@@ -72,6 +72,15 @@ class CrawlerWithDb:
 
         return rules
 
+    def parse_rules(self, crawl_rules, keyword, param_for_parse):
+        crawl_rules[param_for_parse] = crawl_rules[param_for_parse].replace('[' + crawl_rules['param'].upper() + ']',
+                                                                        keyword)
+        crawl_rules[param_for_parse] = crawl_rules[param_for_parse].replace('[YEAR]', str(time.localtime().tm_year))
+        crawl_rules[param_for_parse] = crawl_rules[param_for_parse].replace('[MONTH]', str(time.localtime().tm_mon))
+        crawl_rules[param_for_parse] = crawl_rules[param_for_parse].replace('[DAY]', str(time.localtime().tm_mday))
+
+        return crawl_rules
+
     def make_get_url(self, crawl_rules, arguments):
         crawl_rules['request_url'] = crawl_rules['request_url'].replace('[' + crawl_rules['param'].upper() + ']',
                                                                         arguments['keyword'])
@@ -81,11 +90,7 @@ class CrawlerWithDb:
         return crawl_rules['request_url']
 
     def get_post_data(self, crawl_rules, arguments):
-        crawl_rules['form_data'] = crawl_rules['form_data'].replace('[' + crawl_rules['param'].upper() + ']',
-                                                                    arguments['keyword'])
-        crawl_rules['form_data'] = crawl_rules['form_data'].replace('[YEAR]', str(time.localtime().tm_year))
-        crawl_rules['form_data'] = crawl_rules['form_data'].replace('[MONTH]', str(time.localtime().tm_mon))
-        crawl_rules['form_data'] = crawl_rules['form_data'].replace('[DAY]', str(time.localtime().tm_mday))
+        crawl_rules = self.parse_rules(crawl_rules, arguments['keyword'], 'form_data')
 
         crawl_rules['form_data'] = json.loads(crawl_rules['form_data'])
 
@@ -96,19 +101,21 @@ class CrawlerWithDb:
 
         if crawl_rules['result_list_param'] is not None:
             last_page = int(content[crawl_rules['result_list_param']][0][crawl_rules['result_total_page_param']])
+            result_data = []
             for line in content[crawl_rules['result_list_param']]:
-                print(line[crawl_rules['result_code_param']], line[crawl_rules['result_name_param']])
+                result_data.append(
+                    str(line[crawl_rules['result_code_param']]) + " " + str(line[crawl_rules['result_name_param']]))
             for i in range(2, last_page+1):
-                print(i)
                 crawl_rules['form_data'][crawl_rules['result_current_page_param']] = i
                 res = requests.post(crawl_rules['request_url'], data=crawl_rules['form_data'])
                 if type(res.content) is bytes:
                     content = json.loads(res.content.decode('utf8'))
 
                 for line in content[crawl_rules['result_list_param']]:
-                    print(line[crawl_rules['result_code_param']], line[crawl_rules['result_name_param']])
+                    result_data.append(
+                        str(line[crawl_rules['result_code_param']]) + " " + str(line[crawl_rules['result_name_param']]))
 
-        print(crawl_rules['form_data'])
+        return result_data
 
     def get_data_from_web(self, db_url, arguments):
         if __name__ != "__main__":
@@ -141,22 +148,24 @@ class CrawlerWithDb:
             if crawl_rules['method'] == "get":
                 request_url = self.make_get_url(crawl_rules, arguments)
             elif crawl_rules['method'] == "post":
-                data = self.get_post_data(crawl_rules, arguments)
+                result_data = self.get_post_data(crawl_rules, arguments)
 
-            print(request_url)
-
-
+        return result_data
 
 
 def main():
     db_url, records = user_input()
-    total_errors = 0
     t0 = time.time()  # start the timer
 
     for arguments in records:
         crawler = CrawlerWithDb()
-        result_data, errors = crawler.get_data_from_web(db_url, arguments)
-        total_errors = total_errors + errors
+        result_data = crawler.get_data_from_web(db_url, arguments)
+        print(result_data)
+        t1 = time.time()  # stop the timer
+        total_time = t1 - t0
+
+        print("\nEverything Finished!")
+        print("Total time taken: " + str(round(total_time, 2)) + " Seconds")
 
 
 if __name__ == "__main__":
