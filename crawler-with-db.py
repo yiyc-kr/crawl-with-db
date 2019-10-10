@@ -7,6 +7,8 @@ import time
 import pymysql
 import re
 import requests
+from bs4 import BeautifulSoup
+from requests_html import HTMLSession
 
 args_list = ["config_file", "keyword", "request_url", "stage", "param"]
 
@@ -81,13 +83,24 @@ class CrawlerWithDb:
 
         return crawl_rules
 
-    def make_get_url(self, crawl_rules, arguments):
-        crawl_rules['request_url'] = crawl_rules['request_url'].replace('[' + crawl_rules['param'].upper() + ']',
-                                                                        arguments['keyword'])
-        crawl_rules['request_url'] = crawl_rules['request_url'].replace('[YEAR]', str(time.localtime().tm_year))
-        crawl_rules['request_url'] = crawl_rules['request_url'].replace('[MONTH]', str(time.localtime().tm_mon))
-        crawl_rules['request_url'] = crawl_rules['request_url'].replace('[DAY]', str(time.localtime().tm_mday))
-        return crawl_rules['request_url']
+    def get_get_data(self, crawl_rules, arguments):
+        crawl_rules = self.parse_rules(crawl_rules, arguments['keyword'], 'request_url')
+
+        sess = HTMLSession()
+
+        res = sess.get(crawl_rules['request_url'])
+        res.html.render()
+
+        soup = BeautifulSoup(res.html.html, 'lxml')
+
+        if arguments['stage'] == "select":
+            # result_data = re.sub("[^\d\.%]", "", soup.select(crawl_rules['css_path'])[0].text)
+            result_data = soup.select(crawl_rules['css_path'])[0].text
+            test = soup.select(crawl_rules['css_path'])
+        else:
+            result_data = soup.select(crawl_rules['css_path'])[0].text
+
+        return result_data
 
     def get_post_data(self, crawl_rules, arguments):
         crawl_rules = self.parse_rules(crawl_rules, arguments['keyword'], 'form_data')
@@ -96,8 +109,7 @@ class CrawlerWithDb:
 
         res = requests.post(crawl_rules['request_url'], data=crawl_rules['form_data'])
 
-        if type(res.content) is bytes:
-            content = json.loads(res.content.decode('utf8'))
+        content = json.loads(res.text)
 
         if crawl_rules['result_list_param'] is not None:
             last_page = int(content[crawl_rules['result_list_param']][0][crawl_rules['result_total_page_param']])
@@ -146,7 +158,7 @@ class CrawlerWithDb:
         else:
             crawl_rules = self.get_rules_from_db(db_url, arguments)
             if crawl_rules['method'] == "get":
-                request_url = self.make_get_url(crawl_rules, arguments)
+                result_data = self.get_get_data(crawl_rules, arguments)
             elif crawl_rules['method'] == "post":
                 result_data = self.get_post_data(crawl_rules, arguments)
 
