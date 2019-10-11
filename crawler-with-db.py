@@ -9,6 +9,7 @@ import re
 import requests
 from bs4 import BeautifulSoup
 from requests_html import HTMLSession
+from requests_html import MaxRetries
 
 args_list = ["config_file", "keyword", "request_url", "stage", "param"]
 
@@ -21,7 +22,12 @@ def user_input():
 
     records = []
     if object_check['config_file'] != '':
-        json_file = json.load(open(config_file_check[0].config_file))
+        try:
+            json_file = json.load(open(config_file_check[0].config_file))
+        except json.decoder.JSONDecodeError:
+            print("Check your config file")
+            return 0, 0
+
         db_url = json_file['db_url']
         for record in range(0, len(json_file['Records'])):
             arguments = {}
@@ -65,10 +71,15 @@ class CrawlerWithDb:
         try:
             with db.cursor() as cursor:
                 sql = "SELECT * FROM sources WHERE code = %s and stage = %s and parameter = %s"
-                cursor.execute(sql, [arguments['request_url'], arguments['stage'], arguments['param']])
-                _, _, rules['param'], rules['request_url'], rules['method'], rules['css_path'], rules['form_data'],\
-                    rules['result_list_param'] , rules['result_code_param'], rules['result_name_param'], \
-                    rules['result_total_page_param'], rules['result_current_page_param'] = cursor.fetchone()
+                try:
+                    cursor.execute(sql, [arguments['request_url'], arguments['stage'], arguments['param']])
+                    _, _, rules['param'], rules['request_url'], rules['method'], rules['label_css_path'], \
+                        rules['value_css_path'], rules['form_data'], rules['result_list_param'] , \
+                        rules['result_code_param'], rules['result_name_param'], rules['result_total_page_param'], \
+                        rules['result_current_page_param'] = cursor.fetchone()
+                except TypeError:
+                    print("check your parameters")
+
         finally:
             db.close()
 
@@ -89,16 +100,27 @@ class CrawlerWithDb:
         sess = HTMLSession()
 
         res = sess.get(crawl_rules['request_url'])
-        res.html.render()
+        try:
+            res.html.render()
+        except MaxRetries:
+            print("MaxRetries...")
+            print('Want you reload?')
+            ans = input('(Y/N) << ').lower()
+            if ans in ['yes', 'y']:
+                self.get_get_data(crawl_rules, arguments)
+            elif ans in ['no', 'n']:
+                return 0
 
         soup = BeautifulSoup(res.html.html, 'lxml')
 
         if arguments['stage'] == "select":
-            # result_data = re.sub("[^\d\.%]", "", soup.select(crawl_rules['css_path'])[0].text)
-            result_data = soup.select(crawl_rules['css_path'])[0].text
-            test = soup.select(crawl_rules['css_path'])
+            result_data = ''
+            if crawl_rules['label_css_path'] is not None:
+                result_data += re.sub("[\n]", " ", soup.select(crawl_rules['label_css_path'])[0].text) + ": "
+            result_data += re.sub("[^\d\.%]", "", soup.select(crawl_rules['value_css_path'])[0].text)
+            # result_data = soup.select(crawl_rules['value_css_path'])[0].text
         else:
-            result_data = soup.select(crawl_rules['css_path'])[0].text
+            result_data = soup.select(crawl_rules['value_css_path'])[0].text
 
         return result_data
 
@@ -107,9 +129,20 @@ class CrawlerWithDb:
 
         crawl_rules['form_data'] = json.loads(crawl_rules['form_data'])
 
+        sess = HTMLSession()
+
+        res = sess.post(crawl_rules['request_url'], data=crawl_rules['form_data'])
+        res.html.render()
+        print(res.html.html)
+
         res = requests.post(crawl_rules['request_url'], data=crawl_rules['form_data'])
 
-        content = json.loads(res.text)
+        try:
+            content = json.loads(res.text)
+        except json.decoder.JSONDecodeError:
+            print("Check your keyword and parameter")
+            print(res.text)
+            return 0
 
         if crawl_rules['result_list_param'] is not None:
             last_page = int(content[crawl_rules['result_list_param']][0][crawl_rules['result_total_page_param']])
@@ -166,18 +199,26 @@ class CrawlerWithDb:
 
 
 def main():
+
     db_url, records = user_input()
     t0 = time.time()  # start the timer
 
     for arguments in records:
+        print("==" * 20)
+        print(arguments['param'] + ": " + arguments['keyword'])
         crawler = CrawlerWithDb()
         result_data = crawler.get_data_from_web(db_url, arguments)
-        print(result_data)
+        if result_data != 0:
+            print(result_data)
+        else:
+            print("Err !!")
         t1 = time.time()  # stop the timer
         total_time = t1 - t0
 
-        print("\nEverything Finished!")
+        print("Everything Finished!")
         print("Total time taken: " + str(round(total_time, 2)) + " Seconds")
+        print("==" * 20)
+        print("\n")
 
 
 if __name__ == "__main__":
