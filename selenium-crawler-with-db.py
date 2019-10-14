@@ -129,6 +129,12 @@ class CrawlerWithDb:
 
         crawl_rules['form_data'] = json.loads(crawl_rules['form_data'])
 
+        sess = HTMLSession()
+
+        res = sess.post(crawl_rules['request_url'], data=crawl_rules['form_data'])
+        res.html.render()
+        print(res.html.html)
+
         res = requests.post(crawl_rules['request_url'], data=crawl_rules['form_data'])
 
         try:
