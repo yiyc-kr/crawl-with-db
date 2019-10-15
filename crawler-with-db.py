@@ -156,6 +156,101 @@ class CrawlerWithDb:
 
         return result_data
 
+    def select_data(self, crawl_rules, arguments):
+        if crawl_rules['method'] == 'get':
+            self.parse_rules(crawl_rules, arguments['keyword'], 'request_url')
+
+            sess = HTMLSession()
+
+            res = sess.get(crawl_rules['request_url'])
+            try:
+                res.html.render()
+            except MaxRetries:
+                print("MaxRetries...")
+                print('Want you reload?')
+                ans = input('(Y/N) << ').lower()
+                if ans in ['yes', 'y']:
+                    self.get_get_data(crawl_rules, arguments)
+                elif ans in ['no', 'n']:
+                    return 0
+
+            soup = BeautifulSoup(res.html.html, 'lxml')
+
+            if arguments['stage'] == "select":
+                result_data = ''
+                if crawl_rules['label_css_path'] is not None:
+                    result_data += re.sub("[\n]", " ", soup.select(crawl_rules['label_css_path'])[0].text) + ": "
+                result_data += re.sub("[^\d\.%]", "", soup.select(crawl_rules['value_css_path'])[0].text)
+                # result_data = soup.select(crawl_rules['value_css_path'])[0].text
+            else:
+                result_data = soup.select(crawl_rules['value_css_path'])[0].text
+        elif crawl_rules['method'] == 'post':
+            print(0)    # TODO:
+
+        return result_data
+
+    def search_data(self, crawl_rules, arguments):
+        if crawl_rules['method'] == 'post':
+            crawl_rules = self.parse_rules(crawl_rules, arguments['keyword'], 'form_data')
+
+            crawl_rules['form_data'] = json.loads(crawl_rules['form_data'])
+
+            res = requests.post(crawl_rules['request_url'], data=crawl_rules['form_data'])
+
+            try:
+                content = json.loads(res.text)
+            except json.decoder.JSONDecodeError:
+                print("Check your keyword and parameter")
+                print(res.text)
+                return 0
+
+            if crawl_rules['result_list_param'] is not None:
+                last_page = int(content[crawl_rules['result_list_param']][0][crawl_rules['result_total_page_param']])
+                result_data = []
+                for line in content[crawl_rules['result_list_param']]:
+                    result_data.append(
+                        str(line[crawl_rules['result_code_param']]) + " " + str(line[crawl_rules['result_name_param']]))
+                for i in range(2, last_page + 1):
+                    crawl_rules['form_data'][crawl_rules['result_current_page_param']] = i
+                    res = requests.post(crawl_rules['request_url'], data=crawl_rules['form_data'])
+                    if type(res.content) is bytes:
+                        content = json.loads(res.content.decode('utf8'))
+
+                    for line in content[crawl_rules['result_list_param']]:
+                        result_data.append(
+                            str(line[crawl_rules['result_code_param']]) + " " + str(
+                                line[crawl_rules['result_name_param']]))
+        elif crawl_rules['method'] == 'get':
+            crawl_rules = self.parse_rules(crawl_rules, arguments['keyword'], 'request_url')
+
+            sess = HTMLSession()
+
+            res = sess.get(crawl_rules['request_url'])
+
+            try:
+                res.html.render()
+            except MaxRetries:
+                print("MaxRetries...")
+                print('Want you reload?')
+                ans = input('(Y/N) << ').lower()
+                if ans in ['yes', 'y']:
+                    self.get_get_data(crawl_rules, arguments)
+                elif ans in ['no', 'n']:
+                    return 0
+
+            soup = BeautifulSoup(res.html.html, 'lxml')
+
+            if arguments['stage'] == "select":
+                result_data = ''
+                if crawl_rules['label_css_path'] is not None:
+                    result_data += re.sub("[\n]", " ", soup.select(crawl_rules['label_css_path'])[0].text) + ": "
+                result_data += re.sub("[^\d\.%]", "", soup.select(crawl_rules['value_css_path'])[0].text)
+                # result_data = soup.select(crawl_rules['value_css_path'])[0].text
+            else:
+                result_data = soup.select(crawl_rules['value_css_path'])[0].text
+
+        return result_data
+
     def get_data_from_web(self, db_url, arguments):
         if __name__ != "__main__":
         # TODO: if the calling file contains config_file param
@@ -184,13 +279,20 @@ class CrawlerWithDb:
                 crawl_rules = self.get_rules_from_db(db_url, arguments)
         else:
             crawl_rules = self.get_rules_from_db(db_url, arguments)
-            if crawl_rules['method'] == "get":
-                result_data = self.get_get_data(crawl_rules, arguments)
-            elif crawl_rules['method'] == "post":
-                result_data = self.get_post_data(crawl_rules, arguments)
+            if arguments['stage'] == "search":
+                result_data = self.search_data(crawl_rules, arguments)
+            elif arguments['stage'] == "select":
+                result_data = self.select_data(crawl_rules, arguments)
 
         return result_data
 
+            # TODO: Change condition
+            # if crawl_rules['method'] == "get":
+            #     result_data = self.get_get_data(crawl_rules, arguments)
+            # elif crawl_rules['method'] == "post":
+            #     result_data = self.get_post_data(crawl_rules, arguments)
+
+        # return result_data
 
 def main():
 
