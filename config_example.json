@@ -1,0 +1,42 @@
+{
+  "db_url": "MYSQL://root:123@localhost:3306/data",
+  "webdriver_path": "/home/name/chromedriver",
+  "Records": [
+    {
+      "keyword": "whale",
+      "request_url": "TW",
+      "stage": "search",
+      "param": "name"
+    },
+    {
+      "keyword": "03028100105",
+      "request_url": "TW",
+      "stage": "select",
+      "param": "code"
+    },
+    {
+      "keyword": "whale",
+      "request_url": "CN",
+      "stage": "search",
+      "param": "name"
+    },
+    {
+      "keyword": "0305",
+      "request_url": "CN",
+      "stage": "search",
+      "param": "code."
+    },
+    {
+      "keyword": "0305.20.00",
+      "request_url": "CN",
+      "stage": "search",
+      "param": "code."
+    },
+    {
+      "keyword": "0305.20.0090",
+      "request_url": "CN",
+      "stage": "select",
+      "param": "code."
+    }
+  ]
+}
